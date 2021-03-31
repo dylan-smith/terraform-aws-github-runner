@@ -19,11 +19,44 @@ export interface ListRunnerFilters {
 export interface RunnerType {
   instance_type: string,
   os: string,
-  ami: string,
+  ami_filter: string,
   max_available: number,
   min_available: number,
   disk_size: number,
   runnerTypeName: string,
+}
+
+export async function findAmiID(filter: string, owners: string = "amazon"): Promise<string> {
+  const ec2 = new EC2();
+  const filters = [
+    { Name: "name", Values: [filter] },
+    { Name: "state", Values: ["available"] }
+  ]
+  const describeImagesResponse = await ec2.describeImages({Owners: [owners], Filters: filters}).promise();
+  await sortByCreationDate(describeImagesResponse)
+  const latestImage = describeImagesResponse.Images?.shift();
+  console.info("findAmiID", {filter: filter, latestImage: latestImage});
+  return latestImage?.ImageId as string
+}
+
+// Shamelessly stolen from https://ajahne.github.io/blog/javascript/aws/2019/05/15/getting-an-ami-id-nodejs.html
+async function sortByCreationDate(data: EC2.DescribeImagesResult): Promise<void> {
+  const images = data.Images as EC2.ImageList;
+  images.sort(function(a: EC2.Image,b: EC2.Image) {
+    const dateA: string = a['CreationDate'] as string;
+    const dateB: string = b['CreationDate'] as string;
+    if (dateA < dateB) {
+      return -1;
+    }
+    if (dateA > dateB) {
+      return 1;
+    }
+    // dates are equal
+    return 0;
+  });
+
+  // arrange the images by date in descending order
+  images.reverse();
 }
 
 export async function listRunners(filters: ListRunnerFilters | undefined = undefined): Promise<RunnerInfo[]> {
@@ -91,10 +124,16 @@ export async function createRunner(runnerParameters: RunnerInputParameters): Pro
   const randomSubnet = subnets[Math.floor(Math.random() * subnets.length)];
   console.debug('Runner configuration: ' + JSON.stringify(runnerParameters));
   const ec2 = new EC2();
+  const imageID = await findAmiID(runnerParameters.runnerType.ami_filter);
+  if (imageID === "") {
+    console.error(`Could not find a matching AMI for filter ${runnerParameters.runnerType.ami_filter}`)
+    return
+  }
   const runInstancesResponse = await ec2
     .runInstances({
       MaxCount: 1,
       MinCount: 1,
+      ImageId: imageID,
       LaunchTemplate: {
         LaunchTemplateName: runnerParameters.runnerType.os === "linux" ? launchTemplateNameLinux : launchTemplateNameWindows,
         Version: runnerParameters.runnerType.os === "linux" ? launchTemplateVersionLinux : launchTemplateVersionWindows,
@@ -147,11 +186,12 @@ export interface Repo {
 }
 
 export function getRepo(org: string | undefined, repo: string | undefined, orgLevel: boolean): Repo {
-  return orgLevel
-    ? { repoOwner: org as string, repoName: '' }
-    : { repoOwner: repo?.split('/')[0] as string, repoName: repo?.split('/')[1] as string };
+  return { repoOwner: org as string, repoName: orgLevel ? '' : repo as string}
 }
 
+// scale-down
+// createGitHubClientForRunner("", "seemethere/test-repo", false) // orgLevel false
+// createGitHubClientForRunner("seemethere", "" , true) // orgLevel true
 export function createGitHubClientForRunnerFactory(): (org: string | undefined, repo: string | undefined, orgLevel: boolean) => Promise<Octokit> {
   const cache: Map<string, Octokit> = new Map();
 

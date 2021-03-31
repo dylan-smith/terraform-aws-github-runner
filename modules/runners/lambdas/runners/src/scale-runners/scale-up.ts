@@ -17,7 +17,6 @@ export interface Dictionary<T> {
 export const scaleUp = async (eventSource: string, payload: ActionRequestMessage): Promise<void> => {
   if (eventSource !== 'aws:sqs') throw Error('Cannot handle non-SQS events!');
   const enableOrgLevel = yn(process.env.ENABLE_ORGANIZATION_RUNNERS, { default: true });
-  const maximumRunners = parseInt(process.env.RUNNERS_MAXIMUM_COUNT || '3');
   const runnerExtraLabels = process.env.RUNNER_EXTRA_LABELS;
   const runnerGroup = process.env.RUNNER_GROUP_NAME;
   const environment = process.env.ENVIRONMENT as string;
@@ -67,46 +66,46 @@ export const scaleUp = async (eventSource: string, payload: ActionRequestMessage
       `${enableOrgLevel
         ? `Organization ${payload.repositoryOwner}`
         : `Repo ${payload.repositoryOwner}/${payload.repositoryName}`
-      } has ${currentRunners.length}/${maximumRunners} runners`,
+      } has ${currentRunners.length} runners`,
     );
 
     // const runnerTypes = GetRunnerTypes();
     const runnerTypes: Dictionary<RunnerType> = {
-      linuxCpu: {
-        instance_type: 'c5.2xlarge',
+      "linux.2xlarge": {
+        instance_type: "c5.2xlarge",
         os: 'linux',
-        ami: 'ami-123',
+        ami_filter: "amzn2-ami-hvm-2.0*x86_64-ebs",
         max_available: 200,
         min_available: 10,
         disk_size: 100,
-        runnerTypeName: 'linuxCpu',
+        runnerTypeName: "linux.2xlarge",
       },
-      linuxGpu: {
-        instance_type: 'c5.2xlarge',
+      "linux.8xlarge.nvidia.gpu": {
+        instance_type: "g3.8xlarge",
         os: 'linux',
-        ami: 'ami-123',
-        max_available: 200,
-        min_available: 10,
+        ami_filter: "amzn2-ami-hvm-2.0*x86_64-ebs",
+        max_available: 50,
+        min_available: 1,
         disk_size: 100,
-        runnerTypeName: 'linuxGpu',
+        runnerTypeName: "linux.8xlarge.nvidia.gpu",
       },
-      windowsCpu: {
+      "win.2xlarge": {
         instance_type: 'c5.2xlarge',
         os: 'windows',
-        ami: 'ami-123',
-        max_available: 200,
+        ami_filter: 'Windows_Server-2019-English-Core*',
+        max_available: 50,
         min_available: 10,
         disk_size: 100,
-        runnerTypeName: 'windowsCpu',
+        runnerTypeName: "win.2xlarge",
       },
-      windowsGpu: {
-        instance_type: 'c5.2xlarge',
+      "win.8xlarge.nvidia.gpu": {
+        instance_type: "g3.8xlarge",
         os: 'windows',
-        ami: 'ami-123',
-        max_available: 200,
+        ami_filter: 'Windows_Server-2019-English-Core*',
+        max_available: 30,
         min_available: 10,
         disk_size: 100,
-        runnerTypeName: 'windowsGpu',
+        runnerTypeName: "win.8xlarge.nvidia.gpu",
       },
     }
 
